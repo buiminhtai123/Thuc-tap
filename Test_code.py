@@ -1,5 +1,6 @@
 import cv2
 import time
+import numpy as np
 from ultralytics import YOLO
 
 # ===============================
@@ -20,47 +21,66 @@ while True:
         break
 
     frame = cv2.flip(frame, 1)
-    frame_height = frame.shape[0]
 
     results = model(frame, conf=0.5, verbose=False)
-    frame = results[0].plot()
-
+    # frame = results[0].plot()
+    
     for r in results:
         if r.keypoints is None:
             continue
 
-        kps = r.keypoints.xy.cpu().numpy()  # (N, 17, 2)
+        kps = r.keypoints.xy.cpu().numpy()      # (N,17,2)
+        boxes = r.boxes.xyxy.cpu().numpy()      # (N,4)
 
         for pid, person in enumerate(kps):
+            x1, y1, x2, y2 = map(int, boxes[pid])
 
-            # ===== LẤY KEYPOINT =====
+            # ===== KEYPOINT =====
             Nose = person[0]
             LS, RS = person[5], person[6]
             LH, RH = person[11], person[12]
-            LA, RA = person[15], person[16]
+            LK, RK = person[13], person[14]
 
-            # ===== TÍNH CHIỀU CAO CƠ THỂ =====
-            body_height = max(LA[1], RA[1]) - min(Nose[1], LS[1], RS[1])
-            ratio = body_height / frame_height
+            # ===== POSE GEOMETRY =====
+            xs = person[:, 0]
+            ys = person[:, 1]
 
-            # ===== PHÂN LOẠI HÀNH VI =====
-            if ratio < 0.25:
+            pose_height = ys.max() - ys.min()
+            pose_width  = xs.max() - xs.min()
+            aspect_ratio = pose_height / (pose_width + 1e-6)
+
+            # ===== BODY ANGLE =====
+            mid_shoulder = (LS + RS) / 2
+            mid_hip = (LH + RH) / 2
+
+            dx = mid_shoulder[0] - mid_hip[0]
+            dy = mid_shoulder[1] - mid_hip[1]
+            body_angle = abs(np.degrees(np.arctan2(dy, dx)))
+
+            # ===== LEG BEND =====
+            knee_y = (LK[1] + RK[1]) / 2
+            hip_y  = (LH[1] + RH[1]) / 2
+            leg_ratio = abs(knee_y - hip_y) / (pose_height + 1e-6)
+
+            # ===== BEHAVIOR CLASSIFICATION =====
+            if aspect_ratio < 0.8 or body_angle < 30:
                 state = "LYING"
                 color = (0, 0, 255)
-            elif ratio < 0.5:
+            elif leg_ratio < 0.25:
                 state = "SITTING"
                 color = (0, 255, 255)
             else:
                 state = "STANDING"
                 color = (0, 255, 0)
 
-            # ===== HIỂN THỊ =====
+            # ===== DRAW =====
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(
                 frame,
                 f"ID {pid}: {state}",
-                (20, 80 + pid * 30),
+                (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
+                0.7,
                 color,
                 2
             )

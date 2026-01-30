@@ -1,10 +1,35 @@
-from fastapi import FastAPI
-import uvicorn
+import requests
+import sys
 
-app = FastAPI()
+# THAY ĐỊA CHỈ IP DƯỚI ĐÂY BẰNG IP CỦA MÁY A (SERVER)
+SERVER_IP = "172.31.8.232"
+# SERVER_IP = ""
+URL = f"http://{SERVER_IP}:8000/stream"
 
-@app.post("/stream")
-def stream_chat(data: dict):
-    return {"msg": "Hello"}
+print("=== Kết nối tới Chatbot EVN Server ===")
 
-uvicorn.run(app, host="0.0.0.0", port=8000)
+while True:
+    print("\n[Mời bạn nhập nội dung]:")
+    lines = []
+    while True:
+        line = input()
+        if line.strip() == "" and len(lines) > 0: break
+        if line.lower() in ["exit", "quit"]: sys.exit()
+        lines.append(line)
+    
+    user_input = "\n".join(lines)
+
+    # Gửi yêu cầu tới Server dưới dạng stream
+    print("\n" + "-"*15 + " PROCESSING " + "-"*15 + "\n")
+    try:
+        with requests.post(URL, json={"text": user_input}, stream=True) as r:
+            if r.status_code == 200:
+                for chunk in r.iter_content(chunk_size=None):
+                    if chunk:
+                        print(chunk.decode("utf-8"), end="", flush=True)
+            else:
+                print(f"Lỗi Server: {r.status_code}")
+    except Exception as e:
+        print(f"Không thể kết nối tới Server: {e}")
+
+    print("\n\n" + "="*50)

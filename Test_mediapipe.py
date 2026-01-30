@@ -36,7 +36,7 @@ while True:
     # Convert BGR → RGB (1 lần)
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = pose.process(rgb)
-
+    
     if results.pose_landmarks:
         mp_draw.draw_landmarks(
             frame,
