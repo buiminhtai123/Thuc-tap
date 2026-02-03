@@ -146,7 +146,7 @@ while cap.isOpened():
         try:
             collection.insert_one({
                 "camera_id": "CAM_01",
-                "timestamp": datetime.now(),
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                 "people": people_data_for_db
             })
             last_db_time = now_time
