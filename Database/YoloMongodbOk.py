@@ -26,7 +26,7 @@ print("Running on:", device)
 # ===============================
 # LOAD YOLOv8 POSE
 # ===============================
-model = YOLO("Camera/yolov8n-pose.pt")
+model = YOLO("Data/yolov8n-pose.pt")
 model.to(device)
 
 # ===============================
