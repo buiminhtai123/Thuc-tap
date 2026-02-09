@@ -3,40 +3,29 @@ import face_recognition
 import os
 import numpy as np
 import time
-from pymongo import MongoClient
-from datetime import datetime
 
 # ===============================
 # CONFIG
 # ===============================
 FACE_ROOT = "/home/tai/Ung_dung/Code/Python/Data_faces"
-THRESHOLD = 0.45
-DB_INTERVAL = 1   # giây
-CAMERA_ID = "CAM_01"
+THRESHOLD = 0.55   # tăng threshold khi nhiều người
 
-# ===============================
-# MONGODB
-# ===============================
-MONGO_URI = "mongodb+srv://buiminhtai1234:191104@cluster0.ydqe2ve.mongodb.net/?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI)
-db = client["iot_project"]
-collection = db["Human Resource Management"]
-
-# ===============================q
-# LOAD & ENCODE FACES (MEAN)
-# ===============================
-print("[INFO] Loading & encoding faces...")
+previousTime = 0
 
 known_encodings = []
 known_names = []
+
+# ===============================
+# LOAD & ENCODE (MULTI ENCODING / PERSON)
+# ===============================
+print("[INFO] Loading & encoding faces...")
 
 for person_name in os.listdir(FACE_ROOT):
     person_dir = os.path.join(FACE_ROOT, person_name)
     if not os.path.isdir(person_dir):
         continue
 
-    enc_list = []
-
+    count = 0
     for img_name in os.listdir(person_dir):
         if img_name.lower().endswith((".jpg", ".png", ".jpeg")):
             img_path = os.path.join(person_dir, img_name)
@@ -48,26 +37,23 @@ for person_name in os.listdir(FACE_ROOT):
             encs = face_recognition.face_encodings(rgb)
 
             if encs:
-                enc_list.append(encs[0])
+                known_encodings.append(encs[0])
+                known_names.append(person_name)
+                count += 1
 
-    if len(enc_list) >= 3:
-        mean_enc = np.mean(enc_list, axis=0)
-        known_encodings.append(mean_enc)
-        known_names.append(person_name.upper())
-        print(f"  [+] {person_name}: {len(enc_list)} images")
+    if count > 0:
+        print(f"  [+] {person_name}: {count} images")
 
-print("[INFO] Loaded persons:", known_names)
+print("[INFO] Total encodings:", len(known_encodings))
+print("[INFO] Persons:", list(set(known_names)))
 
 # ===============================
 # CAMERA
 # ===============================
 cap = cv2.VideoCapture(0)
 
-previousTime = 0
-last_db_time = 0
-
 # ===============================
-# REALTIME LOOP
+# REALTIME FACE RECOGNITION
 # ===============================
 while True:
     success, frame = cap.read()
@@ -75,18 +61,21 @@ while True:
         break
 
     frame = cv2.flip(frame, 1)
-    small = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
+    # resize để tăng FPS
+    small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+    rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+
+    # detect + encode (ĐÚNG RGB)
     face_locations = face_recognition.face_locations(
-        small, number_of_times_to_upsample=1, model="hog"
+        rgb_small, number_of_times_to_upsample=1, model="hog"
     )
-    face_encodings = face_recognition.face_encodings(small, face_locations)
-
-    people_data_for_db = []
-    detected_names = set()
+    face_encodings = face_recognition.face_encodings(
+        rgb_small, face_locations
+    )
 
     for face_encoding, face_loc in zip(face_encodings, face_locations):
-        name = "UNKNOWN"
+        name = "Unknown"
 
         if known_encodings:
             distances = face_recognition.face_distance(
@@ -95,10 +84,9 @@ while True:
             best_idx = np.argmin(distances)
 
             if distances[best_idx] < THRESHOLD:
-                name = known_names[best_idx]
-                detected_names.add(name)
+                name = known_names[best_idx].upper()
 
-        # Scale bounding box
+        # scale back box
         top, right, bottom, left = face_loc
         top *= 2
         right *= 2
@@ -117,30 +105,6 @@ while True:
         )
 
     # ===============================
-    # PREPARE DB DATA
-    # ===============================
-    for name in detected_names:
-        people_data_for_db.append({
-            "person_id": name
-        })
-
-    # ===============================
-    # SEND MONGODB (INTERVAL)
-    # ===============================
-    now_time = time.time()
-    if people_data_for_db and (now_time - last_db_time > DB_INTERVAL):
-        try:
-            collection.insert_one({
-                "camera_id": CAMERA_ID,
-                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                "people": people_data_for_db
-            })
-            last_db_time = now_time
-            print("✅ MongoDB inserted:", people_data_for_db)
-        except Exception as e:
-            print("⚠️ MongoDB insertion failed:", e)
-
-    # ===============================
     # FPS
     # ===============================
     currentTime = time.time()
@@ -157,7 +121,7 @@ while True:
         2,
     )
 
-    cv2.imshow("Face Recognition + MongoDB", frame)
+    cv2.imshow("Face Recognition (Scalable)", frame)
 
     if cv2.waitKey(1) & 0xFF == 27:
         break
