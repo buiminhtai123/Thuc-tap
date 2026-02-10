@@ -1,11 +1,16 @@
 import cv2
 import os
-import time
 
 # ===============================
 # ĐƯỜNG DẪN GỐC (CỐ ĐỊNH)
 # ===============================
-BASE_DIR = "/home/tai/Ung_dung/Code/Python/faces_db"
+BASE_DIR = "/home/tai/Ung_dung/Code/Python/Data_faces"
+
+# ===============================
+# CẤU HÌNH
+# ===============================
+MAX_IMAGES = 10
+MAX_SHOT_PER_PRESS = 1
 
 # ===============================
 # NHẬP TÊN NGƯỜI DÙNG
@@ -16,7 +21,7 @@ user_dir = os.path.join(BASE_DIR, user_name)
 os.makedirs(user_dir, exist_ok=True)
 
 print(f"Lưu ảnh tại: {user_dir}")
-    
+
 # ===============================
 # ĐẾM ẢNH ĐÃ CÓ
 # ===============================
@@ -38,21 +43,15 @@ face_cascade = cv2.CascadeClassifier(
 # ===============================
 cap = cv2.VideoCapture(0)
 
-print("Nhấn 's' để chụp 5 ảnh (mỗi ảnh cách 3s), 'q' để thoát")
-
-# ===============================
-# BIẾN BỔ SUNG
-# ===============================
-CAPTURE_TOTAL = 5
-CAPTURE_INTERVAL = 3  # giây
-
-is_capturing = False
-capture_count = 0
-last_capture_time = 0
+print("Phím điều khiển:")
+print("  S : Chụp tối đa 10 ảnh")
+print("  Z : Xóa ảnh vừa chụp")
+print("  Q : Thoát")
 
 while True:
     ret, frame = cap.read()
     frame = cv2.flip(frame, 1)
+
     if not ret:
         print("Không mở được camera")
         break
@@ -66,53 +65,61 @@ while True:
         minSize=(100, 100)
     )
 
-    # ===============================
-    # VẼ KHUNG (ĐỔI MÀU KHI ĐANG CHỤP)
-    # ===============================
     for (x, y, w, h) in faces:
-        if is_capturing:
-            color = (0, 0, 255)   # 🔴 Đang chụp
-        else:
-            color = (0, 255, 0)   # 🟢 Bình thường
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+    # ===============================
+    # HIỂN THỊ SỐ ẢNH
+    # ===============================
+    cv2.putText(
+        frame,
+        f"Images: {img_count}/{MAX_IMAGES}",
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 255, 255),
+        2
+    )
 
     cv2.imshow("Face Capture", frame)
 
     key = cv2.waitKey(1) & 0xFF
-    current_time = time.time()
 
     # ===============================
-    # BẮT ĐẦU CHỤP 5 ẢNH
+    # NHẤN 'S' → CHỤP 1 ẢNH / TỐI ĐA 10
     # ===============================
-    if key == ord('s') and not is_capturing and len(faces) > 0:
-        is_capturing = True
-        capture_count = 0
-        last_capture_time = 0
-        print("▶️ Bắt đầu chụp 5 ảnh...")
+    if key == ord('s') and len(faces) > 0 and img_count < MAX_IMAGES:
+        shot_count = 0
+
+        for (x, y, w, h) in faces:
+            while shot_count < MAX_SHOT_PER_PRESS and img_count < MAX_IMAGES:
+                face_img = frame[y:y + h, x:x + w]
+
+                img_count += 1
+                shot_count += 1
+
+                filename = f"{user_name}_{img_count:03d}.jpg"
+                filepath = os.path.join(user_dir, filename)
+
+                cv2.imwrite(filepath, face_img)
+                print(f"Đã lưu: {filepath}")
+
+                cv2.waitKey(80)
 
     # ===============================
-    # TIẾN TRÌNH CHỤP TỰ ĐỘNG
+    # NHẤN 'Z' → XÓA ẢNH CUỐI
     # ===============================
-    if is_capturing and len(faces) > 0:
-        if last_capture_time == 0 or (current_time - last_capture_time >= CAPTURE_INTERVAL):
-            (x, y, w, h) = faces[0]  # chỉ lấy khuôn mặt đầu tiên
-            face_img = frame[y:y + h, x:x + w]
+    if key == ord('z') and img_count > 0:
+        imgs = sorted([
+            f for f in os.listdir(user_dir)
+            if f.lower().endswith((".jpg", ".png"))
+        ])
 
-            img_count += 1
-            capture_count += 1
-
-            filename = f"{user_name}_{img_count:03d}.jpg"
-            filepath = os.path.join(user_dir, filename)
-
-            cv2.imwrite(filepath, face_img)
-            print(f"📸 Đã lưu ({capture_count}/{CAPTURE_TOTAL}): {filepath}")
-
-            last_capture_time = current_time
-
-            if capture_count >= CAPTURE_TOTAL:
-                is_capturing = False
-                print("✅ Hoàn tất chụp 5 ảnh")
+        if imgs:
+            last_img = imgs[-1]
+            os.remove(os.path.join(user_dir, last_img))
+            img_count -= 1
+            print(f"Đã xóa ảnh: {last_img}")
 
     # ===============================
     # THOÁT
