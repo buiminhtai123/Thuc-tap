@@ -6,11 +6,11 @@ from ultralytics import YOLO
 # ===============================
 # LOAD YOLOv8 POSE
 # ===============================
-model = YOLO("Camera/yolov8n-pose.pt")
+model = YOLO("/home/tai/Ung_dung/Code/Python/Thuc_tap/yolov8n-pose.pt")
 
 cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 prev_time = 0
